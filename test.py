@@ -1,1 +1,0 @@
-print("سلام VS Code!")

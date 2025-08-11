@@ -5,16 +5,16 @@ from reportlab.lib.units import cm
 from reportlab.lib.utils import ImageReader
 import os
 
-# نام فایل اکسل
-excel_file = "data.xlsx"  # اینجا اسم فایل اکسل رو بگذار
+# Excel file name /نام فایل اکسل
+excel_file = "data.xlsx"  # always you should put name of excel file you need to change/اینجا اسم فایل اکسل رو بگذار
 
-# خواندن داده‌ها از اکسل
+# Read data from Excel / خواندن داده‌ها از اکسل
 df = pd.read_excel(excel_file)
 
-# نام فایل خروجی PDF
+# Output name file / نام فایل خروجی PDF
 output_pdf = "output.pdf"
 
-# ایجاد PDF
+# Create PDF/ایجاد PDF
 c = canvas.Canvas(output_pdf, pagesize=A4)
 page_width, page_height = A4
 
@@ -24,13 +24,13 @@ for index, row in df.iterrows():
     HR = row['HR']
     WB = row['WB']
     HL = row['HL']
-    img_path = row.iloc[5]  # ستون F
+    img_path = row.iloc[5]  # column F / ستون F
 
-    # عنوان بالای صفحه
+    # Title / عنوان بالای صفحه
     c.setFont("Helvetica-Bold", 16)
     c.drawCentredString(page_width / 2, page_height - 2 * cm, name_shape)
 
-    # اضافه کردن تصویر
+    # Add image / اضافه کردن تصویر
     if os.path.exists(img_path):
         img = ImageReader(img_path)
         img_width, img_height = img.getSize()
@@ -45,15 +45,15 @@ for index, row in df.iterrows():
         img_y = (page_height - img_height) / 2
         c.drawImage(img, img_x, img_y, img_width, img_height)
 
-        # نوشتن اندازه‌ها
+        # Write the size / نوشتن اندازه‌ها
         c.setFont("Helvetica", 12)
-        # بالا (WT)
+        # Top / بالا (WT)
         c.drawCentredString(page_width / 2, img_y + img_height + 0.5 * cm, f"WT: {WT}")
-        # پایین (WB)
+        # Bottom / پایین (WB)
         c.drawCentredString(page_width / 2, img_y - 1 * cm, f"WB: {WB}")
-        # راست (HR)
+        # Right / راست (HR)
         c.drawString(img_x + img_width + 0.5 * cm, img_y + img_height / 2, f"HR: {HR}")
-        # چپ (HL)
+        # Left / چپ  (HL)
         c.drawRightString(img_x - 0.5 * cm, img_y + img_height / 2, f"HL: {HL}")
 
     else:
@@ -64,4 +64,4 @@ for index, row in df.iterrows():
     c.showPage()
 
 c.save()
-print(f"PDF ساخته شد: {output_pdf}")
+print(f"PDF Done : {output_pdf}")
