@@ -33,6 +33,7 @@ for _, row in df.iterrows():
     # خواندن مقادیر از دیتابیس
     WT, H, WB, HR, TH = row["WT"], row["H"], row["WB"], row["HR"], row["Thickness"]
     XL, YB = row["xl  ="], row["yb  ="]
+    WO = row["Brace Entering"]
 
     doc = ezdxf.readfile(dxf_path)
     msp = doc.modelspace()
@@ -50,7 +51,7 @@ for _, row in df.iterrows():
             pass
 
     # ---------- محاسبه مختصات متن‌ها طبق دیتابیس ----------
-    # H
+    # HL
     H_x = -XL-(2*TH)
     H_y = (H / 2) - YB
 
@@ -69,10 +70,18 @@ for _, row in df.iterrows():
     # WT 
     WT_x = -XL + WT/2
     WT_y = (H - YB)+(2*TH)
+
+    # WO for Brace and Post
+    WO_x = -XL + WB/2
+    WO_y = -YB -(2*TH)
+
+    # Subshape
+    Subshape_x = 0
+    Subshape_y = TH_y + 0.2
     
     #title
     SectionName_x = -XL + WT/2
-    SectionName_y = H/2 + 0.5
+    SectionName_y = H/2 + 0.4
 
     # ---------- چاپ مختصات برای بررسی ----------
     # print(f"\nSection: {section_name}")
@@ -90,13 +99,22 @@ for _, row in df.iterrows():
     frontend = Frontend(RenderContext(doc), MatplotlibBackend(ax))
     frontend.draw_layout(msp)
 
+    
     # اضافه کردن متن‌ها روی شکل
-    ax.text(H_x, H_y, f"H: {H:.2f}", ha='right', va='center', fontsize=12, color='red')
-    ax.text(WB_x, WB_y, f"WB: {WB:.2f}", ha='center', va='center', fontsize=12, color='blue')
-    ax.text(HR_x, HR_y, f"HR: {HR:.2f}", ha='left', va='center', fontsize=12, color='green')
-    ax.text(WT_x, WT_y, f"WT: {WT:.2f}", ha='center', va='center', fontsize=12, color='orange')
-    ax.text(TH_x, TH_y, f"Th: {TH:.2f}", ha='center', va='center', fontsize=12, color='purple')
-    ax.text(SectionName_x, SectionName_y, section_name, ha='center', va='bottom', fontsize=14, color='black')
+
+    # WB یا WO (بسته به نوع shape)
+    if shape in ["Brace", "Post"]:
+        ax.text(WB_x, WB_y, f"WO: {WO:.2f}", ha='center', va='center', fontsize=12, color='blue')   # WO
+    else:
+        ax.text(WB_x, WB_y, f"WB: {WB:.2f}", ha='center', va='center', fontsize=12, color='blue')   # WB
+
+    ax.text(H_x, H_y, f"HL: {H:.2f}", ha='right', va='center', fontsize=12, color='red')    # HL
+    ax.text(HR_x, HR_y, f"HR: {HR:.2f}", ha='left', va='center', fontsize=12, color='green')    # HR
+    ax.text(WT_x, WT_y, f"WT: {WT:.2f}", ha='center', va='center', fontsize=12, color='orange')    # WT
+    ax.text(TH_x, TH_y, f"Th: {TH:.2f}", ha='center', va='center', fontsize=14, color='purple')    # Th
+    ax.text(SectionName_x, SectionName_y, f"\n{section_name}", ha='center', va='bottom', fontsize=14, color='black')    # Title
+    ax.text(Subshape_x, Subshape_y, subshape , ha='center', va='center', fontsize=30, color='black')    # Subshape
+
 
     # ذخیره PNG
     plt.savefig(f"output/{section_name}.png", dpi=300, bbox_inches="tight")
