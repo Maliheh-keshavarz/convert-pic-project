@@ -39,7 +39,7 @@ def render_dxf_to_png(dxf_path):
 
     img = Image.open(buf).convert("RGBA")
     img = replace_blue_with_black(img)
-    img.show()
+    #img.show()   #just for test 
 
 if __name__ == "__main__":
     render_dxf_to_png("templates/Box Beam.A.dxf")

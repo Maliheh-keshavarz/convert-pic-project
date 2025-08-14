@@ -1,377 +1,98 @@
-import os
-import re
 import pandas as pd
-from PIL import Image, ImageDraw, ImageFont, ImageChops
-import tkinter as tk
-from tkinter import filedialog
 import ezdxf
-import matplotlib.pyplot as plt
-from ezdxf.addons.drawing import matplotlib as ezdxf_matplotlib
 from ezdxf.addons.drawing import RenderContext, Frontend
-import io
+from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
+import matplotlib.pyplot as plt
+import os
 
-# تنظیمات اولیه
-EXCEL_FILE = "data.xlsx"
-TEMPLATES_DIR = "templates"
+# خواندن دیتابیس
+df = pd.read_excel("data.xlsx", header=1)
+df = df.dropna(subset=["Shape", "Subshape", "WT", "H", "WB", "HR", "Thickness"])
 
-OUT_W, OUT_H = 1800, 2400
+# ایجاد پوشه خروجی
+os.makedirs("output", exist_ok=True)
 
-FONT_PATH = r"C:\Windows\Fonts\arial.ttf"
-TITLE_FONT_SIZE = 60
-DIM_FONT_SIZE = 80
-THICK_FONT_SIZE = 100
+for _, row in df.iterrows():
+    section_name = str(row["Section Name"]).strip()
+    shape = str(row["Shape"]).strip()
+    subshape = str(row["Subshape"]).strip()
 
-MARGIN = 60
-TITLE_TOP_MARGIN = 200
+    dxf_path = f"templates/{shape}.{subshape}.dxf"
+    if not os.path.exists(dxf_path):
+        print(f"DXF not found: {dxf_path}")
+        continue
 
-# ستون‌های اصلی
-COL_NCODE = "code"
-COL_SECTION = "Section Name"
-COL_SHAPE = "Shape"
-COL_SUBSHAPE = "Subshape"
+    WT, H, WB, HR, TH = row["WT"], row["H"], row["WB"], row["HR"], row["Thickness"]
 
-COL_WT = "WT"
-COL_H = "H"
-COL_WB = "WB"
-COL_HR = "HR"
-COL_THICK = "Thickness"
-
-# رنگ‌ها
-COLOR_TEXT = (0, 0, 0)
-COLOR_RECT_BG = (255, 255, 255)
-
-# مختصات ثابت پیکسلی برای ابعاد
-wt_pos = (700, 300)    # وسط بالا
-wb_pos = (900, 2200)   # وسط پایین
-hr_pos = (1600, 1300)  # راست وسط
-h_pos  = (200, 1300)   # چپ وسط
-
-def select_output_dir(default="out_images"):
-    root = tk.Tk()
-    root.withdraw()
-    folder_selected = filedialog.askdirectory(title="Select base output directory")
-    if not folder_selected:
-        folder_selected = os.getcwd()
-    root.destroy()
-    final_output_dir = os.path.join(folder_selected, default)
-    os.makedirs(final_output_dir, exist_ok=True)
-    return final_output_dir
-
-def trim(im, border=5):
-    if im.mode != "RGBA":
-        im = im.convert("RGBA")
-    bg = Image.new(im.mode, im.size, (255, 255, 255, 0))
-    diff = ImageChops.difference(im, bg)
-    bbox = diff.getbbox()
-    if bbox:
-        left = max(bbox[0] - border, 0)
-        upper = max(bbox[1] - border, 0)
-        right = min(bbox[2] + border, im.width)
-        lower = min(bbox[3] + border, im.height)
-        return im.crop((left, upper, right, lower))
-    else:
-        return im
-
-def replace_gray_with_white(img, threshold=200):
-    pixels = img.load()
-    w, h = img.size
-    for x in range(w):
-        for y in range(h):
-            r, g, b, a = pixels[x, y]
-            if a > 0:
-                if abs(r - g) < 10 and abs(g - b) < 10 and r > threshold and g > threshold and b > threshold:
-                    pixels[x, y] = (255, 255, 255, a)
-    return img
-
-def sanitize_filename(s):
-    s = str(s).strip()
-    s = re.sub(r'[\\/:"*?<>|]+', '', s)
-    return s or "row"
-
-def fmt2(v):
-    try:
-        return f"{float(v):.2f}"
-    except Exception:
-        return "" if pd.isna(v) else str(v)
-
-def find_template(shape, subshape=None):
-    if not shape or str(shape).strip() == "":
-        return None
-    s = str(shape).strip()
-    subs = str(subshape).strip() if subshape and not pd.isna(subshape) else None
-    candidates = []
-    if subs:
-        candidates.append(f"{s}.{subs}.dxf")
-    candidates.append(f"{s}.dxf")
-    for c in candidates:
-        path = os.path.join(TEMPLATES_DIR, c)
-        if os.path.exists(path):
-            return path
-    try:
-        files = os.listdir(TEMPLATES_DIR)
-    except FileNotFoundError:
-        return None
-    low_s = s.lower()
-    for fname in files:
-        if fname.lower().startswith(low_s):
-            return os.path.join(TEMPLATES_DIR, fname)
-    return None
-
-def load_font(ttf_path, size):
-    try:
-        if ttf_path and os.path.exists(ttf_path):
-            return ImageFont.truetype(ttf_path, size)
-    except Exception:
-        pass
-    try:
-        return ImageFont.load_default()
-    except Exception:
-        return None
-
-def text_size(draw_obj, text, font):
-    try:
-        bbox = draw_obj.textbbox((0, 0), text, font=font)
-        width = bbox[2] - bbox[0]
-        height = bbox[3] - bbox[1]
-        return width, height
-    except AttributeError:
-        return font.getsize(text)
-
-def render_dxf_to_png(dxf_path, max_width, max_height):
-    def get_msp_extents(msp):
-        xmin = ymin = float('inf')
-        xmax = ymax = float('-inf')
-        for e in msp:
-            try:
-                box = e.bbox()
-                if box:
-                    x0, y0, z0 = box.extmin
-                    x1, y1, z1 = box.extmax
-                    xmin = min(xmin, x0)
-                    ymin = min(ymin, y0)
-                    xmax = max(xmax, x1)
-                    ymax = max(ymax, y1)
-            except Exception:
-                continue
-        if xmin == float('inf'):
-            return None
-        return (xmin, ymin, xmax, ymax)
-
-    try:
-        doc = ezdxf.readfile(dxf_path)
-    except Exception as e:
-        print(f"Error reading DXF {dxf_path}: {e}")
-        return None
-
-    msp = doc.modelspace()
-
-    fig = plt.figure(figsize=(max_width/100, max_height/100), dpi=100)
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_aspect('equal')
-    ax.axis('off')
-
-    extents = get_msp_extents(msp)
-    if extents is not None:
-        xmin, ymin, xmax, ymax = extents
-        ax.set_xlim(xmin, xmax)
-        ax.set_ylim(ymin, ymax)
-        ax.invert_yaxis()  # معمولا محور Y برعکس است در نقشه‌ها
-    else:
-        ax.set_xlim(0, max_width)
-        ax.set_ylim(0, max_height)
-
-    ctx = RenderContext(doc)
-    frontend = Frontend(ctx, ezdxf_matplotlib.MatplotlibBackend(ax))
-
-    try:
-        frontend.draw_layout(msp, finalize=True)
-    except Exception as e:
-        print(f"Rendering DXF failed: {e}")
-        plt.close(fig)
-        return None
-
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', transparent=True)
-    plt.close(fig)
-    buf.seek(0)
-    img = Image.open(buf)
-    img = img.convert("RGBA")
-    return img
-
-    
-
-def render_dxf_simple(dxf_path):
-    import ezdxf
-    import matplotlib.pyplot as plt
-    from ezdxf.addons.drawing import RenderContext, Frontend
-    from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
-
+    # باز کردن فایل DXF
     doc = ezdxf.readfile(dxf_path)
     msp = doc.modelspace()
 
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.set_aspect('equal')
-    ax.axis('off')
+    # محاسبه bounding box و جمع آوری تمام نقاط
+    min_x = min_y = float('inf')
+    max_x = max_y = float('-inf')
+    points_x = []
+    points_y = []
+
+    for e in msp:
+        try:
+            if e.dxftype() in ('LINE', 'LWPOLYLINE', 'POLYLINE'):
+                pts = []
+                if e.dxftype() == 'LINE':
+                    pts = [e.dxf.start, e.dxf.end]
+                else:
+                    pts = [p[:2] for p in e.get_points()]
+                for x, y in pts:
+                    min_x = min(min_x, x)
+                    max_x = max(max_x, x)
+                    min_y = min(min_y, y)
+                    max_y = max(max_y, y)
+                    points_x.append(x)
+                    points_y.append(y)
+        except Exception:
+            pass
+
+    # اگر bounding box معتبر نیست، از مقادیر پیشفرض استفاده کنیم
+    if min_x == float('inf') or max_x == float('-inf'):
+        min_x, max_x = 0, WT
+    if min_y == float('inf') or max_y == float('-inf'):
+        min_y, max_y = 0, HR
+
+    width = max_x - min_x
+    height = max_y - min_y
+    if width == 0: width = 1
+    if height == 0: height = 1
+
+    # مرکز واقعی شکل به صورت مستقل برای هر محور
+    center_x = sum(points_x)/len(points_x) if points_x else (min_x + max_x)/2
+    center_y = sum(points_y)/len(points_y) if points_y else (min_y + max_y)/2
+
+    # رندر با Matplotlib
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_aspect("equal")
+    ax.axis("off")
 
     ctx = RenderContext(doc)
     frontend = Frontend(ctx, MatplotlibBackend(ax))
-
     frontend.draw_layout(msp)
 
-    plt.show()
+    # تنظیم محدوده محور با حاشیه
+    margin_x = width * 0.1
+    margin_y = height * 0.1
+    ax.set_xlim(min_x - margin_x, max_x + margin_x)
+    ax.set_ylim(min_y - margin_y, max_y + margin_y)
 
+    # افزودن متن‌ها نسبت به bounding box و مرکز واقعی
+    fontsize = min(width, height) * 3  # اندازه متن نسبی به شکل
+    ax.text(min_x + 0.05*width, min_y + 0.5*height, f"HR: {HR:.2f}", ha='left', va='center', fontsize=fontsize)
+    ax.text(center_x, max_y - 0.05*height, f"WT: {WT:.2f}", ha='center', va='top', fontsize=fontsize)
+    ax.text(max_x - 0.05*width, center_y, f"H: {H:.2f}", ha='right', va='center', fontsize=fontsize)
+    ax.text(min_x + 0.5*width, min_y + 0.05*height, f"WB: {WB:.2f}", ha='center', va='bottom', fontsize=fontsize)
+    ax.text(center_x, center_y, f"Th: {TH:.2f}", ha='center', va='center', fontsize=fontsize)
+    ax.text(min_x + 0.05*width, max_y + 0.05*height, section_name, ha='left', va='bottom', fontsize=fontsize*1.2)
 
-    buf = io.BytesIO()
-    plt.show()
-    fig.savefig(buf, format='png', transparent=True)
+    # ذخیره PNG
+    plt.savefig(f"output/{section_name}.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
-    buf.seek(0)
-    img = Image.open(buf)
-    img = img.convert("RGBA")
-    return img
 
-if __name__ == "__main__":
-    # تست رندر یک قالب DXF
-    tpl_path = "templates/Step Beam.E.dxf"  # مسیر درست فایل دxf خودت رو بذار اینجا
-    render_dxf_simple(tpl_path)
-
-    # بعد از تست میتونی ادامه برنامه اصلی رو اجرا کنی:
-    # main()
-
-
-
-def main():
-    output_dir = select_output_dir()
-
-    title_font = load_font(FONT_PATH, TITLE_FONT_SIZE)
-    dim_font = load_font(FONT_PATH, DIM_FONT_SIZE)
-    thick_font = load_font(FONT_PATH, THICK_FONT_SIZE)
-
-    df = pd.read_excel(EXCEL_FILE, header=1, dtype=str)
-
-    cols_check = [COL_NCODE, COL_SECTION, COL_SHAPE, COL_SUBSHAPE]
-    df_valid = df[~(df[cols_check].isna().all(axis=1) | df[cols_check].apply(lambda row: all(str(x).strip() == '' for x in row), axis=1))]
-
-    print(f"Rows total: {len(df)}, Rows valid: {len(df_valid)}")
-
-    for idx, row in df_valid.iterrows():
-        ncode = row.get(COL_NCODE, "").strip()
-        section = row.get(COL_SECTION, "").strip()
-        shape = row.get(COL_SHAPE, "")
-        subshape = row.get(COL_SUBSHAPE, "")
-        WT = row.get(COL_WT, "")
-        H = row.get(COL_H, "")
-        WB = row.get(COL_WB, "")
-        HR = row.get(COL_HR, "")
-        TH = row.get(COL_THICK, "")
-
-        base_name = sanitize_filename(f"{ncode} _ {section}")
-        out_path = os.path.join(output_dir, f"{base_name}.png")
-
-        tpl_path = find_template(shape, subshape)
-        if tpl_path is None:
-            default_tpl = os.path.join(TEMPLATES_DIR, "default.dxf")
-            tpl_path = default_tpl if os.path.exists(default_tpl) else None
-
-        canvas_img = Image.new("RGB", (OUT_W, OUT_H), color=(255, 255, 255))
-        draw = ImageDraw.Draw(canvas_img)
-
-        title_line = section
-        w, h = text_size(draw, title_line, title_font)
-        x = (OUT_W - w) // 2
-        y = TITLE_TOP_MARGIN
-        draw.text((x, y), title_line, fill=COLOR_TEXT, font=title_font)
-
-        content_top = y + h + 10
-        content_bottom = OUT_H - MARGIN
-        content_h = content_bottom - content_top
-        content_w = OUT_W - 2 * MARGIN
-
-        if tpl_path:
-            if tpl_path.lower().endswith(".dxf"):
-                tpl = render_dxf_to_png(tpl_path, content_w, content_h)
-                if tpl is None:
-                    print(f"[{idx + 1}] Failed to render DXF: {tpl_path}")
-                    continue
-                tpl = replace_gray_with_white(tpl)
-                tpl_cropped = trim(tpl, border=20)
-            else:
-                tpl = Image.open(tpl_path).convert("RGBA")
-                tpl = replace_gray_with_white(tpl)
-                tpl_cropped = trim(tpl, border=20)
-
-            scale = min(content_w / tpl_cropped.width, content_h / tpl_cropped.height, 1.0)
-            new_w = max(1, int(tpl_cropped.width * scale))
-            new_h = max(1, int(tpl_cropped.height * scale))
-            tpl_resized = tpl_cropped.resize((new_w, new_h), Image.LANCZOS)
-
-            img_x = (OUT_W - new_w) // 2
-            img_y = content_top + (content_h - new_h) // 2
-
-            canvas_img.paste(tpl_resized, (img_x, img_y), tpl_resized)
-        else:
-            img_x = MARGIN
-            img_y = content_top
-            new_w = content_w
-            new_h = content_h
-
-        # Thickness
-        TH_s = fmt2(TH)
-        if TH_s:
-            thick_label = f"Th: {TH_s}"
-            tw_th, th_th = text_size(draw, thick_label, thick_font)
-            thick_x = img_x + (new_w - tw_th) // 2
-            thick_y = img_y + (new_h - th_th) // 2
-            draw.rectangle([thick_x - 6, thick_y - 4, thick_x + tw_th + 6, thick_y + th_th + 4], fill=COLOR_RECT_BG)
-            draw.text((thick_x, thick_y), thick_label, fill=COLOR_TEXT, font=thick_font)
-
-        # WT
-        WT_s = fmt2(WT)
-        if WT_s:
-            wt_label = f"{WT_s}"
-            wtw, wth = text_size(draw, wt_label, dim_font)
-            wt_x = wt_pos[0] - wtw // 2
-            wt_y = wt_pos[1] - wth // 2
-            draw.rectangle([wt_x - 4, wt_y - 3, wt_x + wtw + 4, wt_y + wth + 3], fill=COLOR_RECT_BG)
-            draw.text((wt_x, wt_y), wt_label, fill=COLOR_TEXT, font=dim_font)
-
-        # WB
-        WB_s = fmt2(WB)
-        if WB_s:
-            wb_label = f"{WB_s}"
-            wbw, wbh = text_size(draw, wb_label, dim_font)
-            wb_x = wb_pos[0] - wbw // 2
-            wb_y = wb_pos[1] - wbh // 2
-            draw.rectangle([wb_x - 4, wb_y - 3, wb_x + wbw + 4, wb_y + wbh + 3], fill=COLOR_RECT_BG)
-            draw.text((wb_x, wb_y), wb_label, fill=COLOR_TEXT, font=dim_font)
-
-        # HR
-        HR_s = fmt2(HR)
-        if HR_s:
-            hr_label = f"{HR_s}"
-            hrw, hrh = text_size(draw, hr_label, dim_font)
-            hr_x = hr_pos[0] - hrw // 2
-            hr_y = hr_pos[1] - hrh // 2
-            draw.rectangle([hr_x - 4, hr_y - 3, hr_x + hrw + 4, hr_y + hrh + 3], fill=COLOR_RECT_BG)
-            draw.text((hr_x, hr_y), hr_label, fill=COLOR_TEXT, font=dim_font)
-
-        # H
-        H_s = fmt2(H)
-        if H_s:
-            h_label = f"{H_s}"
-            hw, hh = text_size(draw, h_label, dim_font)
-            h_x = h_pos[0] - hw // 2
-            h_y = h_pos[1] - hh // 2
-            draw.rectangle([h_x - 4, h_y - 3, h_x + hw + 4, h_y + hh + 3], fill=COLOR_RECT_BG)
-            draw.text((h_x, h_y), h_label, fill=COLOR_TEXT, font=dim_font)
-
-        try:
-            canvas_img.save(out_path, format="PNG", quality=95)
-            print(f"[{idx + 1}] Saved: {out_path}")
-        except Exception as e:
-            print(f"[{idx + 1}] Error saving {out_path}: {e}")
-
-    print("Done.")
-
-if __name__ == "__main__":
-    main()
+print("Matplotlib rendering with shape and accurately centered WT/H finished safely.")
