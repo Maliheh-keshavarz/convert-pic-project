@@ -86,6 +86,7 @@ for _, row in df.iterrows():
     TH_x = 0
     TH_y = -YB + (HR / 2)
 
+
     ## WT
     WT_x = -XL + (WT / 2)
     WT_y = (H - YB) + (2 * TH)
