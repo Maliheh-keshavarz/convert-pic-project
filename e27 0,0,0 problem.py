@@ -32,6 +32,8 @@ import matplotlib.pyplot as plt
 import os
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
+from ezdxf.addons.drawing.properties import LayoutProperties
+
 
 ## ---------- Excel File Selection / انتخاب فایل Excel ----------
 Tk().withdraw()  ## Hide the main Tkinter window / پنهان کردن پنجره اصلی Tkinter
@@ -94,6 +96,12 @@ for _, row in df.iterrows():
     doc = ezdxf.readfile(dxf_path)
     msp = doc.modelspace()
 
+    ## ---------- Force white background / مجبور کردن پس‌زمینه سفید ----------
+    msp_props = LayoutProperties.from_layout(msp)
+    msp_props.set_colors("#ffffff")  # پس‌زمینه سفید، رنگ 7 به‌صورت خودکار مشکی
+
+
+
     ## ---------- Calculate text coordinates / محاسبه مختصات متن ----------
 
     ## For all labels :
@@ -147,7 +155,8 @@ for _, row in df.iterrows():
     ax.set_aspect("equal")
     ax.axis("off")
     frontend = Frontend(RenderContext(doc), MatplotlibBackend(ax))
-    frontend.draw_layout(msp)
+    frontend.draw_layout(msp, layout_properties=msp_props)
+
 
     ## ---------- Add text labels / اضافه کردن متن‌ها ----------
     ax.text(H_x, H_y, f"HL: {H:.2f}", ha='right', va='center', fontsize=12, color='red')

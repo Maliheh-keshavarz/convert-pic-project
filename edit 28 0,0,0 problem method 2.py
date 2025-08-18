@@ -32,6 +32,8 @@ import matplotlib.pyplot as plt
 import os
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename
+from ezdxf.addons.drawing import config
+
 
 ## ---------- Excel File Selection / انتخاب فایل Excel ----------
 Tk().withdraw()  ## Hide the main Tkinter window / پنهان کردن پنجره اصلی Tkinter
@@ -146,7 +148,13 @@ for _, row in df.iterrows():
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_aspect("equal")
     ax.axis("off")
-    frontend = Frontend(RenderContext(doc), MatplotlibBackend(ax))
+    backend = MatplotlibBackend(ax)
+    cfg = config.Configuration(
+        background_policy=config.BackgroundPolicy.WHITE,  # پس‌زمینه سفید
+        color_policy=config.ColorPolicy.BLACK,            # همه‌ی موجودیت‌ها مشکی
+    )
+
+    frontend = Frontend(RenderContext(doc), backend, config=cfg)
     frontend.draw_layout(msp)
 
     ## ---------- Add text labels / اضافه کردن متن‌ها ----------
