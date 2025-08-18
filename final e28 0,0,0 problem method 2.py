@@ -124,7 +124,15 @@ for _, row in df.iterrows():
 
     ## Subshape label 
     Subshape_x = 0
-    Subshape_y = TH_y + 0.2
+
+    if shape.lower().startswith("step") and TH < 0.08:
+        # اگر Step Beam هست و ضخامت کمتر از 0.08
+        Subshape_y = TH_y + 0.6 # فاصله بزرگتر (ثابت)
+    else:
+        # بقیه‌ی شکل‌ها
+        Subshape_y = TH_y + 0.3
+
+    #Subshape_y = TH_y + 0.3
 
     ## Section Name 
     SectionName_x = -XL + (WT / 2)
@@ -158,14 +166,14 @@ for _, row in df.iterrows():
     frontend.draw_layout(msp)
 
     ## ---------- Add text labels / اضافه کردن متن‌ها ----------
-    ax.text(H_x, H_y, f"HL: {H:.2f}", ha='right', va='center', fontsize=12, color='red')
+    ax.text(H_x, H_y, f"HL: {H:.2f}", ha='right', va='center', fontsize=12, color='red' , fontweight='bold')
     if shape in ["Brace", "Post"]:
-        ax.text(WB_x, WB_y, f"WO: {WO:.2f}", ha='center', va='center', fontsize=12, color='blue')
+        ax.text(WB_x, WB_y, f"WO: {WO:.2f}", ha='center', va='center', fontsize=12, color='blue', fontweight='bold')
     else:
-        ax.text(WB_x, WB_y, f"WB: {WB:.2f}", ha='center', va='center', fontsize=12, color='blue')
-    ax.text(HR_x, HR_y, f"HR: {HR:.2f}", ha='left', va='center', fontsize=12, color='green')
-    ax.text(WT_x, WT_y, f"WT: {WT:.2f}", ha='center', va='center', fontsize=12, color='orange')
-    ax.text(TH_x, TH_y, f"Th: {TH:.2f}", ha='center', va='center', fontsize=14, color='purple')
+        ax.text(WB_x, WB_y, f"WB: {WB:.2f}", ha='center', va='center', fontsize=12, color='blue', fontweight='bold')
+    ax.text(HR_x, HR_y, f"HR: {HR:.2f}", ha='left', va='center', fontsize=12, color='green', fontweight='bold')
+    ax.text(WT_x, WT_y, f"WT: {WT:.2f}", ha='center', va='center', fontsize=12, color='orange', fontweight='bold')
+    ax.text(TH_x, TH_y, f"Th: {TH:.2f}", ha='center', va='center', fontsize=14, color='purple', fontweight='bold')
     ax.text(SectionName_x, SectionName_y, f"\n{section_name}", ha='center', va='bottom', fontsize=14, color='black')
     ax.text(Subshape_x, Subshape_y, subshape, ha='center', va='center', fontsize=30, color='black')
 
