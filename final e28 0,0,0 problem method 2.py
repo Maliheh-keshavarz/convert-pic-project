@@ -126,10 +126,10 @@ for _, row in df.iterrows():
     Subshape_x = 0
 
     if shape.lower().startswith("step") and TH < 0.08:
-        # اگر Step Beam هست و ضخامت کمتر از 0.08
-        Subshape_y = TH_y + 0.6 # فاصله بزرگتر (ثابت)
+        # If Step Beam and thickness is less than 0.08
+        Subshape_y = TH_y + 0.6 
     else:
-        # بقیه‌ی شکل‌ها
+        # Other shapes
         Subshape_y = TH_y + 0.3
 
     #Subshape_y = TH_y + 0.3
